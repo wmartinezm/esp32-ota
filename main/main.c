@@ -7,7 +7,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
-#include "esp_event_loop.h"
+//#include "esp_event_loop.h"
+#include "esp_event.h"
 #include "esp_log.h"
 
 #include "lwip/err.h"
@@ -136,6 +137,12 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGD(TAG, "MQTT_EVENT_ERROR");
+        break;
+        case MQTT_EVENT_ANY:
+        ESP_LOGD(TAG, "MQTT_EVENT_ANY");
+        break;
+        case MQTT_EVENT_DELETED:
+        ESP_LOGD(TAG, "MQTT_EVENT_DELETED");
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGD(TAG, "MQTT_EVENT_BEFORE_CONNECT");
@@ -437,13 +444,13 @@ static enum state connection_state(BaseType_t actual_event, const char *current_
 
     if (actual_event & WIFI_DISCONNECTED_EVENT)
     {
-        ESP_LOGE(TAG, "%s state, Wi-Fi not connected, wait for the connect", current_state_name);
+        ESP_LOGE(TAG, "%s state, Wi-Fi not connected, wait for the connect!", current_state_name);
         return STATE_WAIT_WIFI;
     }
 
     if (actual_event & MQTT_DISCONNECTED_EVENT)
     {
-        ESP_LOGW(TAG, "%s state, MQTT not connected, wait for the connect", current_state_name);
+        ESP_LOGW(TAG, "%s state, MQTT not connected, wait for the connect!", current_state_name);
         return STATE_WAIT_MQTT;
     }
 
