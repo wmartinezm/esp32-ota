@@ -11,7 +11,7 @@
 #define TAG "tb_ota"
 
 /*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "v1.1"
+#define FIRMWARE_VERSION "v1.0"
 
 /*! Factory partiton label */
 #define FACTORY_PARTITION_LABEL "factory"
@@ -70,6 +70,9 @@
 
 /*! NVS storage key where the MQTT access token is saved */
 #define NVS_KEY_MQTT_ACCESS_TOKEN "access_token"
+
+#define MQTT_BROKER "mqtt://driver.cloudmqtt.com"
+#define MQTT_PORT   18608
 
 /**
  * @brief Set of states for @ref ota_task(void)

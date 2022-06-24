@@ -106,11 +106,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         if (strcmp(TB_ATTRIBUTES_RESPONSE_TOPIC, event->topic) == 0)
         {
             memcpy(mqtt_msg, event->data, event->data_len);
+            // printf("%s\n", event->data);
             mqtt_msg[event->data_len] = 0;
             cJSON *attributes = cJSON_Parse(mqtt_msg);
+            // char *rendered = cJSON_Print(attributes);   //
+            // printf("%s\n", rendered);                   //
             if (attributes != NULL)
             {
                 cJSON *shared = cJSON_GetObjectItem(attributes, "shared");
+                // char *rendered = cJSON_Print(shared);
                 parse_ota_config(shared);
             }
 
@@ -138,10 +142,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_ERROR:
         ESP_LOGD(TAG, "MQTT_EVENT_ERROR");
         break;
-        case MQTT_EVENT_ANY:
+    case MQTT_EVENT_ANY:
         ESP_LOGD(TAG, "MQTT_EVENT_ANY");
         break;
-        case MQTT_EVENT_DELETED:
+    case MQTT_EVENT_DELETED:
         ESP_LOGD(TAG, "MQTT_EVENT_DELETED");
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
@@ -200,17 +204,18 @@ static void main_application_task(void *pvParameters)
     {
         xEventGroupWaitBits(event_group, OTA_TASK_IN_NORMAL_STATE_EVENT, false, true, portMAX_DELAY);
 
-        counter = counter < 1 ? counter + 1 : 0;
+        counter = counter < 1 ? counter + 3 : 0;
 
         cJSON *root = cJSON_CreateObject();
         cJSON_AddNumberToObject(root, "counter", counter);
         char *post_data = cJSON_PrintUnformatted(root);
         esp_mqtt_client_publish(mqtt_client, TB_TELEMETRY_TOPIC, post_data, 0, 1, 0);
+        // printf("Publishing...\n"); // Test
         cJSON_Delete(root);
         // Free is intentional, it's client responsibility to free the result of cJSON_Print
         free(post_data);
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(20000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -366,16 +371,30 @@ static void mqtt_app_start(const char *running_partition_label)
 {
     assert(running_partition_label != NULL);
 
-    const char *mqtt_url = get_mqtt_url(running_partition_label);
-    const uint32_t mqtt_port = get_mqtt_port(running_partition_label);
-    const char *mqtt_access_token = get_mqtt_access_token(running_partition_label);
+    // const char *mqtt_url = get_mqtt_url(running_partition_label);
+    // const uint32_t mqtt_port = get_mqtt_port(running_partition_label);
+    // const char *mqtt_access_token = get_mqtt_access_token(running_partition_label);
+
+    // esp_mqtt_client_config_t mqtt_cfg = {
+    //     .uri = mqtt_url,
+    //     .event_handle = mqtt_event_handler,
+    //     .port = mqtt_port,
+    //     .username = mqtt_access_token
+    // };
+
+    const char *mqtt_url = "mqtt://driver.cloudmqtt.com";
+    const uint32_t mqtt_port = 18608;
+    const char *mqtt_username = "tzadsfea";
+    const char *mqtt_password = "btPSSVu9XjLQ";
+    const char *mqtt_clientid = "ESP32_Flex-AA.BB.CC.DD";
 
     esp_mqtt_client_config_t mqtt_cfg = {
         .uri = mqtt_url,
         .event_handle = mqtt_event_handler,
         .port = mqtt_port,
-        .username = mqtt_access_token
-    };
+        .username = mqtt_username,
+        .password = mqtt_password,
+        .client_id = mqtt_clientid};
 
     mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     APP_ABORT_ON_ERROR(esp_mqtt_client_start(mqtt_client));
@@ -397,6 +416,8 @@ static bool fw_versions_are_equal(const char *current_ver, const char *target_ve
 
 static bool ota_params_are_specified(struct shared_keys ota_config)
 {
+    // printf("url:%s sw-v:%s\n", ota_config.targetFwServerUrl, ota_config.targetFwVer);
+    ESP_LOGW(TAG, "url: %s, sw-v: %s", shared_attributes.targetFwServerUrl, shared_attributes.targetFwVer);
     if (strlen(ota_config.targetFwServerUrl) == 0)
     {
         ESP_LOGW(TAG, "Firmware URL is not specified");
@@ -425,6 +446,7 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
             .url = ota_config.targetFwServerUrl,
             .cert_pem = (char *)server_cert_pem_start,
             .event_handler = _http_event_handler,
+            .timeout_ms = 60000,
         };
         esp_err_t ret = esp_https_ota(&config);
         if (ret == ESP_OK)
@@ -539,7 +561,8 @@ static void ota_task(void *pvParameters)
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
-                ESP_LOGI(TAG, "Connected to MQTT broker %s, on port %d", CONFIG_MQTT_BROKER_URL, CONFIG_MQTT_BROKER_PORT);
+                // ESP_LOGI(TAG, "Connected to MQTT broker %s, on port %d", CONFIG_MQTT_BROKER_URL, CONFIG_MQTT_BROKER_PORT);
+                ESP_LOGI(TAG, "Connected to MQTT broker %s, on port %d", MQTT_BROKER, MQTT_PORT);
 
                 // Send the current firmware version to ThingsBoard
                 cJSON *current_fw = cJSON_CreateObject();
@@ -556,6 +579,7 @@ static void ota_task(void *pvParameters)
                 ESP_LOGI(TAG, "Waiting for shared attributes response");
 
                 state = STATE_WAIT_OTA_CONFIG_FETCHED;
+                // state = STATE_APP_LOOP;
                 break;
             }
 
@@ -576,7 +600,7 @@ static void ota_task(void *pvParameters)
             {
                 if (actual_event & OTA_CONFIG_FETCHED_EVENT)
                 {
-                    ESP_LOGI(TAG, "Shared attributes were fetched from ThingsBoard");
+                    ESP_LOGI(TAG, "Shared attributes were fetched from Broker");
                     xEventGroupClearBits(event_group, OTA_CONFIG_FETCHED_EVENT);
                     state = STATE_OTA_CONFIG_FETCHED;
                     break;
@@ -630,6 +654,7 @@ static void ota_task(void *pvParameters)
                 }
                 xEventGroupClearBits(event_group, OTA_CONFIG_UPDATED_EVENT);
                 xEventGroupSetBits(event_group, OTA_TASK_IN_NORMAL_STATE_EVENT);
+                printf("Set event: OTA_TASK_IN_NORMAL_STATE_EVENT\n");
                 state = STATE_APP_LOOP;
                 break;
             }
